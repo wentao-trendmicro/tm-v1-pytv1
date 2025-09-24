@@ -52,8 +52,9 @@ def test_consume_notes(client):
 
 
 def test_consume_alerts(client):
+    alerts = []
     result = client.alert.consume(
-        lambda s: None, "2020-06-15T10:00:00Z", "2020-06-15T10:00:00Z"
+        lambda s: alerts.append(s), "2025-09-16T10:00:00Z", "2025-09-17T24:00:00Z", "updatedDateTime"
     )
     assert result.result_code == ResultCode.SUCCESS
     assert result.response.total_consumed == 2
