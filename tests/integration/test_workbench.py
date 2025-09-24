@@ -52,19 +52,17 @@ def test_consume_notes(client):
 
 
 def test_consume_alerts(client):
-    alerts = []
     result = client.alert.consume(
-        lambda s: alerts.append(s),
-        "2025-09-16T10:00:00Z",
-        "2025-09-17T24:00:00Z",
-        "updatedDateTime",
+        lambda s: None, "2020-06-15T10:00:00Z", "2020-06-15T10:00:00Z"
     )
     assert result.result_code == ResultCode.SUCCESS
     assert result.response.total_consumed == 2
 
 
 def test_consume_alerts_with_next_link(client):
-    result = client.alert.consume(lambda s: None, "next_link", "2020-06-15T10:00:00Z")
+    result = client.alert.consume(
+        lambda s: None, "next_link", "2020-06-15T10:00:00Z"
+    )
     assert result.result_code == ResultCode.SUCCESS
     assert result.response.total_consumed == 11
 
@@ -92,7 +90,9 @@ def test_update_alert_status_is_precondition_failed(client):
 
 
 def test_update_alert_status_is_not_found(client):
-    result = client.alert.update_status("1", "not_found", AlertStatus.IN_PROGRESS)
+    result = client.alert.update_status(
+        "1", "not_found", AlertStatus.IN_PROGRESS
+    )
     assert not result.response
     assert result.result_code == ResultCode.ERROR
     assert result.error.code == "NotFound"
@@ -116,7 +116,10 @@ def test_get_alert_ti(client):
     assert result.response.data.alert_provider == Provider.TI
     assert result.response.etag == "33a64df551425fcc55e4d42a148795d9f25f89d4"
     assert result.response.data.campaign == "campaign"
-    assert result.response.data.indicators[0].fields[0][0] == "processFileHashSha1"
+    assert (
+        result.response.data.indicators[0].fields[0][0]
+        == "processFileHashSha1"
+    )
 
 
 def test_list_alerts(client):
