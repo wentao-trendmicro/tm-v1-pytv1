@@ -8,6 +8,11 @@ on:
         required: true
         type: string
 
+# 添加权限
+permissions:
+  contents: write
+  id-token: write  # 用于attestation
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -48,8 +53,85 @@ jobs:
           git checkout develop
           git merge --no-ff ${{ env.BRANCH }}
           git push --atomic origin main develop refs/tags/v${{ env.VERSION }} :${{ env.BRANCH }}
+      
+      # 上传构建产物（供后续job使用）
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 5
+      
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_TOKEN }}
           verbose: true
+
+  # 新增：创建Immutable GitHub Release
+  create-github-release:
+    name: Create GitHub Release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Generate release notes
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          # 获取上一个tag
+          PREV_TAG=$(git describe --tags --abbrev=0 v${VERSION}^ 2>/dev/null || echo "")
+          
+          # 生成changelog
+          echo "## 📦 Installation" > release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo "pip install YOUR_PACKAGE_NAME==${VERSION}" >> release_notes.md
+          echo '```' >> release_notes.md
+          echo "" >> release_notes.md
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "## 📝 Changes since ${PREV_TAG}" >> release_notes.md
+            echo "" >> release_notes.md
+            git log ${PREV_TAG}..v${VERSION} --pretty=format:"- %s (%h)" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "## 🔐 Verification" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "This release includes cryptographic attestations for supply chain security." >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Verify downloaded files with:" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo "gh attestation verify <file> --owner=YOUR_ORG --repo=YOUR_REPO" >> release_notes.md
+          echo '```' >> release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
+          body_path: release_notes.md
+          files: dist/*
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      - name: Generate build attestations
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'dist/*'
